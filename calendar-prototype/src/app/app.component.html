@@ -1,0 +1,86 @@
+<mbsc-eventcalendar
+  #inst
+  [clickToCreate]="false"
+  [dragToCreate]="false"
+  [dragToMove]="true"
+  [dragToResize]="true"
+  [resources]="myResources"
+  [data]="myEvents"
+  [view]="view"
+  [selectedDate]="mySelectedDate"
+  [height]="calendarHeight"
+  [scheduleEventContentTemplate]="eventCardTemplate"
+  (onEventUpdated)="onEventUpdated($event)"
+>
+</mbsc-eventcalendar>
+
+<!-- Single template reused for every event on the timeline. The 3 fixed rows
+     use "container" events (spanning the whole day) whose `kind` selects the
+     custom UI to render (schedule form / toolbar / tabs). Every other event
+     falls through to the plain event card. -->
+<ng-template #eventCardTemplate let-data>
+  <ng-container [ngSwitch]="data.original.kind">
+    <div class="fixed-row fixed-row--schedule" *ngSwitchCase="'schedule-slot'">
+      <span class="fixed-row__label">Schedule</span>
+      <select class="fixed-row__select" [(ngModel)]="scheduleResource">
+        <option *ngFor="let d of [1,2,3,4,5,6]" [value]="'dut-' + d">DUT {{ d }}</option>
+      </select>
+      <input
+        class="fixed-row__input"
+        type="text"
+        placeholder="Work item title"
+        [(ngModel)]="scheduleTitle"
+      />
+      <button type="button" class="nav-btn" (click)="scheduleWorkItem()">Schedule</button>
+    </div>
+
+    <div class="fixed-row fixed-row--toolbar" *ngSwitchCase="'toolbar'">
+      <span class="fixed-row__label">Toolbar</span>
+      <button type="button" class="nav-btn" (click)="navigateToTarget()">
+        Navigate to Event
+      </button>
+    </div>
+
+    <div class="fixed-row fixed-row--tabs" *ngSwitchCase="'tabs'">
+      <span class="fixed-row__label">Tabs</span>
+      <button
+        type="button"
+        class="tab-btn"
+        [class.tab-btn--active]="activeTab === 'systems'"
+        (click)="selectTab('systems')"
+      >
+        Systems
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        [class.tab-btn--active]="activeTab === 'duts'"
+        (click)="selectTab('duts')"
+      >
+        DUTs
+      </button>
+      <button
+        type="button"
+        class="tab-btn"
+        [class.tab-btn--active]="activeTab === 'assets'"
+        (click)="selectTab('assets')"
+      >
+        Assets
+      </button>
+    </div>
+
+    <div class="event-card" *ngSwitchDefault>
+      <div class="event-card__title">{{ data.title }}</div>
+      <div class="event-card__time">{{ data.start }} - {{ data.end }}</div>
+    </div>
+  </ng-container>
+</ng-template>
+
+<mbsc-popup
+  [display]="'anchored'"
+  [isOpen]="showPopup"
+  [anchor]="anchor"
+  [closeOnOverlayClick]="true"
+  (onClose)="onPopupClose()"
+  >Test</mbsc-popup
+>

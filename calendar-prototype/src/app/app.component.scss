@@ -1,0 +1,128 @@
+// The date/day header row is irrelevant for this single-day, hour based
+// schedule, so it's hidden - only the hour labels stay visible.
+::ng-deep .mbsc-schedule-date-header {
+  display: none;
+}
+
+// Mobiscroll fills every event box with its own tinted color layer. Remove it
+// only for the fixed-row placeholder events (event.cssClass = 'fixed-row-event')
+// so they stay plain, and normal events keep their default coloring.
+::ng-deep .fixed-row-event .mbsc-schedule-event-background {
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+// Remove the hourly grid separator lines for the 3 fixed resource rows
+// (resource.cssClass = 'fixed-resource-row'), so they render as plain bars.
+::ng-deep .fixed-resource-row .mbsc-schedule-item {
+  border-top: none !important;
+}
+
+::ng-deep .fixed-resource-row .mbsc-schedule-item-last {
+  border-bottom: none !important;
+}
+
+.fixed-row {
+  // Pin the row's content to the left edge of the viewport so it stays put
+  // even when the timeline is scrolled horizontally through the hours.
+  background: #f0f0f0;
+  position: sticky;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 100%;
+  width: 100%;
+  padding: 0 10px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  overflow: hidden;
+}
+::ng-deep .fixed-resource-row {
+  background: #fff !important;
+}
+
+::ng-deep .fixed-resource-row * {
+  border: none !important;
+}
+
+.fixed-row__label {
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.fixed-row__input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.fixed-row__select {
+  padding: 4px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.nav-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #1976d2;
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.nav-btn:hover {
+  background: #1565c0;
+}
+
+.tab-btn {
+  flex-shrink: 0;
+  padding: 5px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tab-btn--active {
+  background: #1976d2;
+  border-color: #1976d2;
+  color: #fff;
+}
+
+.event-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  padding: 2px 6px;
+  overflow: hidden;
+}
+
+.event-card__title {
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.event-card__time {
+  font-size: 11px;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
