@@ -4,7 +4,7 @@
   [dragToCreate]="false"
   [dragToMove]="true"
   [dragToResize]="true"
-  [resources]="myResources"
+  [resources]="filteredResources"
   [data]="myEvents"
   [view]="view"
   [selectedDate]="mySelectedDate"
@@ -36,8 +36,23 @@
 
     <div class="fixed-row fixed-row--toolbar" *ngSwitchCase="'toolbar'">
       <span class="fixed-row__label">Toolbar</span>
+      <button type="button" class="nav-btn" (click)="navigateToEvent(fixtureEvent)">
+  → System 5 Fixture 1 Event
+</button>
       <button type="button" class="nav-btn" (click)="navigateToTarget()">
-        Navigate to Event
+        → DUT 1103 Event
+      </button>
+      <button type="button" class="nav-btn" (click)="navigateToDutSix()">
+        → DUT 6 Event
+      </button>
+      <button type="button" class="nav-btn" (click)="navigateToAsset()">
+        → Asset 400 Event
+      </button>
+      <button type="button" class="nav-btn" (click)="navigateToSharedDut()">
+        → Shared (DUT 3)
+      </button>
+      <button type="button" class="nav-btn" (click)="navigateToSharedAsset()">
+        → Shared (Asset 4)
       </button>
     </div>
 

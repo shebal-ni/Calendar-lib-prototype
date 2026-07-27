@@ -11,11 +11,51 @@ import {
   setOptions,
 } from '@mobiscroll/angular';
 import { FormsModule } from '@angular/forms';
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit, ViewChild, NgZone } from '@angular/core';
 
 // Discriminator for the placeholder events that live in the 3 fixed rows.
 // They only carry UI (schedule form / toolbar / tabs), not real schedule data.
 type FixedRowKind = 'schedule-slot' | 'toolbar' | 'tabs';
+
+// --- App-level abstraction, mirroring SlCalendarEvent from systemlink-calendar-lib ---
+// This is the shape app-level code (e.g. the toolbar click handler) works with.
+// It intentionally uses `resources` (plural array) instead of Mobiscroll's native
+// `resource` field, so it must be converted before being handed to Mobiscroll.
+interface SlCalendarEvent {
+  id: string | number;
+  header?: string;
+  start?: Date;
+  end?: Date;
+  resources?: Array<string | number>;
+  color?: string;
+  canEdit?: boolean;
+  canDelete?: boolean;
+  cssClass?: string;
+  kind?: FixedRowKind;
+}
+
+// --- Adapter, mirroring MobiscrollDataAdapter.convertToMbscEventData() ---
+// Converts the app-level SlCalendarEvent shape into Mobiscroll's native
+// MbscCalendarEvent shape. This is the layer the real app's sl-event-calendar
+// wrapper provides and the test app was previously missing, which is why
+// `resources: [...]` was silently ignored by raw Mobiscroll.
+class MobiscrollDataAdapter {
+  public convertToMbscEventData(event: SlCalendarEvent): MbscCalendarEvent {
+    const allowEdit = event.canEdit ?? false;
+    const allowDelete = event.canDelete ?? false;
+    const { resources, ...eventDataWithoutResources } = event;
+
+    return {
+      ...eventDataWithoutResources,
+      resource: resources,          // resources[] -> native `resource` (array or single id)
+      title: event.header,          // header -> title
+      dragBetweenResources: allowEdit,
+      dragInTime: allowEdit,
+      resize: allowEdit,
+      editable: allowEdit || allowDelete,
+    } as MbscCalendarEvent;
+  }
+}
 
 @Component({
   selector: 'app-root',
@@ -25,6 +65,13 @@ type FixedRowKind = 'schedule-slot' | 'toolbar' | 'tabs';
 export class AppComponent {
   // Reference to the eventcalendar instance so we can call navigateToEvent().
   @ViewChild('inst', { static: false }) calendar!: MbscEventcalendar;
+
+  private readonly mobiscrollDataAdapter = new MobiscrollDataAdapter();
+
+  // Incremented on every navigateToEvent() call. Used to invalidate any
+  // in-flight, previously-scheduled navigation/correction from an earlier
+  // click, so overlapping async chains can't race each other and stomp on
+  // the same scrollTop.
 
   public myResources: MbscResource[] = [];
   public myEvents: MbscCalendarEvent[] = [];
@@ -54,15 +101,57 @@ export class AppComponent {
   public scheduleTitle = '';
   public scheduleResource: string = 'dut-1';
 
-  // The event used to demonstrate navigateToEvent. It lives on a resource well
-  // below the fixed rows, so navigating to it requires scrolling.
+  // The event used to demonstrate navigateToEvent on DUT 3.
+  // These feed `[data]` directly on the native <mbsc-eventcalendar>, so they stay
+  // in native Mobiscroll shape (singular `resource`) - only the app-level
+  // navigateToEvent() call path goes through the SlCalendarEvent -> adapter conversion.
   public targetEvent: MbscCalendarEvent = {
-    id: 'target-event',
-    resource: 'dut-3',
+    id: 'target-event-dut',
+    resource: 'dut-1103',
     start: new Date('2024-11-21T09:00:00.000Z'),
     end: new Date('2024-11-21T11:00:00.000Z'),
-    title: 'TARGET EVENT',
+    title: 'DUT 1103 Event',
     color: '#e53935',
+  };
+
+  // Asset event for demonstration on the Assets tab.
+  public assetEvent: MbscCalendarEvent = {
+    id: 'target-event-asset',
+    resource: 'asset-400',
+    start: new Date('2024-11-21T14:00:00.000Z'),
+    end: new Date('2024-11-21T16:00:00.000Z'),
+    title: 'Asset 400 Event',
+    color: '#1976d2',
+  };
+
+  // DUT 6 event for demonstration.
+  public dutSixEvent: MbscCalendarEvent = {
+    id: 'target-event-dut6',
+    resource: 'dut-6',
+    start: new Date('2024-11-21T10:00:00.000Z'),
+    end: new Date('2024-11-21T12:00:00.000Z'),
+    title: 'DUT 6 Event',
+    color: '#388e3c',
+  };
+
+  // Fixture event for demonstration on the Systems tab.
+  public fixtureEvent: MbscCalendarEvent = {
+    id: 'target-event-fixture',
+    resource: 'sys-5-fix-1',
+    start: new Date('2024-11-21T15:00:00.000Z'),
+    end: new Date('2024-11-21T17:00:00.000Z'),
+    title: 'System 5 Fixture 1 Event',
+    color: '#7b1fa2',
+  };
+
+  // Shared event that appears on both DUT 3 and Asset 4.
+  public sharedEvent: MbscCalendarEvent = {
+    id: 'target-event-shared',
+    resource: ['dut-3', 'asset-4'],
+    start: new Date('2024-11-21T11:00:00.000Z'),
+    end: new Date('2024-11-21T13:00:00.000Z'),
+    title: 'Shared Event',
+    color: '#f57c00',
   };
 
   public showPopup = false;
@@ -72,9 +161,19 @@ export class AppComponent {
   private previousStart = new Date();
   private previousEnd = new Date();
 
-  public constructor() {
+  // Filtered resources based on active tab. The 3 fixed rows are always shown;
+  // scrollable resources are filtered to match the active tab category.
+  // NOTE: this is a plain property, not a getter. A getter would return a new
+  // array reference on every Angular change-detection cycle (not just on tab
+  // switch), which made Mobiscroll treat the resources input as constantly
+  // changing and destabilized _resourceTops. It's only recomputed explicitly
+  // in selectTab().
+  public filteredResources: MbscResource[] = [];
+
+  public constructor(private ngZone: NgZone) {
     this.myResources = this.buildResources();
     this.myEvents = this.buildEvents();
+    this.filteredResources = this.computeFilteredResources(); // initial value
   }
 
   private buildResources(): MbscResource[] {
@@ -90,24 +189,25 @@ export class AppComponent {
     ];
 
     // Systems, each with nested fixtures.
-    for (let s = 1; s <= 3; s++) {
+    for (let s = 1; s <= 5; s++) {
       resources.push({
         id: `sys-${s}`,
         name: `System ${s}`,
         children: [
           { id: `sys-${s}-fix-1`, name: `Fixture ${s}.1` },
           { id: `sys-${s}-fix-2`, name: `Fixture ${s}.2` },
+          { id: `sys-${s}-fix-3`, name: `Fixture ${s}.3` },
         ],
       });
     }
 
     // DUTs.
-    for (let d = 1; d <= 6; d++) {
+    for (let d = 1; d <= 1200; d++) {
       resources.push({ id: `dut-${d}`, name: `DUT ${d}` });
     }
 
     // Assets.
-    for (let a = 1; a <= 6; a++) {
+    for (let a = 1; a <= 1200; a++) {
       resources.push({ id: `asset-${a}`, name: `Asset ${a}` });
     }
 
@@ -131,12 +231,16 @@ export class AppComponent {
       kind,
     } as MbscCalendarEvent);
 
-    return [
-      fixedRow('schedule-slot-row', 'fixed-schedule', 'schedule-slot'),
-      fixedRow('toolbar-row', 'fixed-toolbar', 'toolbar'),
-      fixedRow('tabs-row', 'fixed-tabs', 'tabs'),
-      this.targetEvent,
-    ];
+return [
+  fixedRow('schedule-slot-row', 'fixed-schedule', 'schedule-slot'),
+  fixedRow('toolbar-row', 'fixed-toolbar', 'toolbar'),
+  fixedRow('tabs-row', 'fixed-tabs', 'tabs'),
+  this.targetEvent,
+  this.assetEvent,
+  this.dutSixEvent,
+  this.fixtureEvent,
+  this.sharedEvent,
+];
   }
 
   // Adds a new event from the "Schedule" fixed row onto the chosen resource.
@@ -159,9 +263,31 @@ export class AppComponent {
     this.scheduleTitle = '';
   }
 
-  public selectTab(tab: 'systems' | 'duts' | 'assets'): void {
-    this.activeTab = tab;
-  }
+ public selectTab(tab: 'systems' | 'duts' | 'assets'): void {
+  this.activeTab = tab;
+  // Simulate production's combineLatest behavior: multiple independent
+  // resource-array rebuilds firing in quick succession around the tab click,
+  // each one a full deep-rebuild (not a cheap filter).
+  this.filteredResources = this.deepRebuildFilteredResources();
+  setTimeout(() => { this.filteredResources = this.deepRebuildFilteredResources(); }, 30);
+  setTimeout(() => { this.filteredResources = this.deepRebuildFilteredResources(); }, 90);
+}
+
+private deepRebuildFilteredResources(): MbscResource[] {
+  const fixedRows = this.myResources.slice(0, 3);
+  const scrollableResources = this.myResources.slice(3).filter(r => {
+    if (this.activeTab === 'systems') return r.id.toString().startsWith('sys-');
+    if (this.activeTab === 'duts') return r.id.toString().startsWith('dut-');
+    if (this.activeTab === 'assets') return r.id.toString().startsWith('asset-');
+    return true;
+  });
+  // Deep-clone every resource and its children, mirroring convertToMbscResourceData's cost.
+  const deepClone = (r: MbscResource): MbscResource => ({
+    ...r,
+    children: r.children?.map(deepClone),
+  });
+  return [...fixedRows, ...scrollableResources].map(deepClone);
+}
 
   // Returns the resource id(s) an event belongs to, regardless of whether
   // `resource` is a single id or an array of ids.
@@ -169,40 +295,151 @@ export class AppComponent {
     return Array.isArray(event.resource) ? event.resource : [event.resource as string | number];
   }
 
-  // Finds the event through its resource + id and lets navigateToEvent bring the
-  // resource row to the top of the scrollable area (below the fixed rows) while
-  // also scrolling horizontally to the event's time range.
+  private computeFilteredResources(): MbscResource[] {
+    const fixedRows = this.myResources.slice(0, 3);
+    const scrollableResources = this.myResources.slice(3);
+    const filtered = scrollableResources.filter((r) => {
+      if (this.activeTab === 'systems') return r.id.toString().startsWith('sys-');
+      if (this.activeTab === 'duts') return r.id.toString().startsWith('dut-');
+      if (this.activeTab === 'assets') return r.id.toString().startsWith('asset-');
+      return true;
+    });
+    return [...fixedRows, ...filtered];
+  }
+
+  // Generic method to navigate to any event, with tab switching if needed.
+  // Pass the event and an optional targetResourceId to override the event's resource.
+  // If the target resource is not in the current tab, automatically switches tabs.
   //
-  // navigateToEvent resolves the scroll target from the data model (id + start +
-  // resource), so it works with virtual scroll even when the target row is
-  // off-screen. We build a minimal explicit object and force `resource` to the
-  // exact target id (rather than relying on whatever is stored on the event) so
-  // it always scrolls to that row, even if the event spans multiple resources.
+  // Each call gets its own navigation attempt. Any previously-scheduled navigation
+  // or scroll-correction that hasn't run yet becomes superseded and
+  // is skipped - this prevents two overlapping async chains from racing each
+  // other and producing nondeterministic scroll results.
+  public navigateToEvent(
+    event: MbscCalendarEvent,
+    targetResourceId?: string | number
+  ): void {
+    const resourceId = targetResourceId ?? (event.resource as string);
+    const requiredTab = this.getTabForResource(resourceId);
+
+    if (requiredTab && this.activeTab !== requiredTab) {
+      this.selectTab(requiredTab);
+      // Single deferred attempt (not two racing ones) - gives Angular CD +
+      // Mobiscroll's own onDataChange time to rebuild _resourceTops for the
+      // newly-activated tab's resources before we read from it.
+      setTimeout(() => {
+        this.performNavigation(event, resourceId);
+      }, 0);
+    } else {
+      this.performNavigation(event, resourceId);
+    }
+  }
+
+  // Determine which tab a resource belongs to.
+  private getTabForResource(resourceId: string | number): 'systems' | 'duts' | 'assets' | null {
+    const id = resourceId.toString();
+    if (id.startsWith('sys-')) return 'systems';
+    if (id.startsWith('dut-')) return 'duts';
+    if (id.startsWith('asset-')) return 'assets';
+    return null;
+  }
+
+  // Deprecated: use navigateToEvent() directly instead.
   public navigateToTarget(): void {
-    const targetResourceId = this.targetEvent.resource as string;
+    this.navigateToEvent(this.targetEvent);
+  }
+
+  // Deprecated: use navigateToEvent() directly instead.
+  public navigateToAsset(): void {
+    this.navigateToEvent(this.assetEvent);
+  }
+
+  // Deprecated: use navigateToEvent() directly instead.
+  public navigateToDutSix(): void {
+    this.navigateToEvent(this.dutSixEvent);
+  }
+
+  // Deprecated: use navigateToEvent() directly instead.
+  public navigateToSharedDut(): void {
+    const sharedOnDut = { ...this.sharedEvent, resource: 'dut-3' } as MbscCalendarEvent;
+    this.navigateToEvent(sharedOnDut, 'dut-3');
+  }
+
+  // Deprecated: use navigateToEvent() directly instead.
+  public navigateToSharedAsset(): void {
+    const sharedOnAsset = { ...this.sharedEvent, resource: 'asset-4' } as MbscCalendarEvent;
+    this.navigateToEvent(sharedOnAsset, 'asset-4');
+  }
+
+  // Helper method to perform the actual navigation to an event.
+  // Finds the real event (if one exists) for the target resource, then builds the
+  // app-level SlCalendarEvent shape (id, start, resources: [single id]) - matching
+  // exactly what scheduling-assistant-timeline-view.component.ts builds in the
+  // real app - and hands it to navigateToEventViaAdapter() for conversion + the
+  // actual native Mobiscroll call.
+  private performNavigation(event: MbscCalendarEvent, targetResourceId: string | number): void {
+    const resourceId = targetResourceId;
 
     const eventForResource = this.myEvents.find((ev) =>
-      this.getResourceIds(ev).includes(targetResourceId)
+      this.getResourceIds(ev).includes(resourceId)
     );
 
-    this.calendar.navigateToEvent({
-      id: eventForResource?.id ?? this.targetEvent.id,
-      start: eventForResource?.start ?? this.targetEvent.start,
-      resource: targetResourceId,
-    } as MbscCalendarEvent);
+    const slEvent: SlCalendarEvent = {
+      id: eventForResource?.id ?? event.id ?? resourceId,
+      start: eventForResource?.start as Date ?? event.start as Date,
+      resources: [resourceId], // single-element array — always just the target resource id
+    };
+
+    this.navigateToEventViaAdapter(slEvent);
   }
 
-  public onEventUpdated(event: MbscEventUpdatedEvent): void {
-    this.showPopup = true;
-    this.anchor = event.target!;
-    this.currentEventId = event.event.id ?? 0;
+  // Mirrors SlEventCalendarComponent.navigateToEvent() in sl-event-calendar.component.ts:
+  // adapts the app-level SlCalendarEvent to native Mobiscroll shape, calls the real
+  // navigateToEvent(), then corrects for the fixed rows overlapping the target row.
+  private lastClickTime = 0;
 
-    const original = this.myEvents.find((ev) => ev.id === event.event.id);
-    this.previousStart = (original?.start as Date) ?? new Date();
-    this.previousEnd = (original?.end as Date) ?? new Date();
+private navigateToEventViaAdapter(event: SlCalendarEvent): void {
+  const now = performance.now();
+  const gapSinceLastClick = now - this.lastClickTime;
+  this.lastClickTime = now;
 
-    this.myEvents = this.myEvents.map((ev) => (ev.id === event.event.id ? event.event! : ev));
-  }
+  const mbscEvent = this.mobiscrollDataAdapter.convertToMbscEventData(event);
+  const el = (this.calendar as any).nativeElement as HTMLElement;
+  const scrollCont = el.querySelector<HTMLElement>('.mbsc-timeline-grid-scroll');
+
+  console.log('BEFORE navigateToEvent', {
+    gapSinceLastClickMs: gapSinceLastClick.toFixed(1),
+    scrollTopBefore: scrollCont?.scrollTop,
+    target: mbscEvent.resource,
+  });
+
+  this.calendar.navigateToEvent(mbscEvent);
+
+  console.log('AFTER navigateToEvent (sync)', {
+    scrollTopAfterSync: scrollCont?.scrollTop,
+  });
+
+  requestAnimationFrame(() => {
+    console.log('AFTER 1 rAF', { scrollTop: scrollCont?.scrollTop });
+  });
+  setTimeout(() => {
+    console.log('AFTER 300ms', { scrollTop: scrollCont?.scrollTop });
+  }, 300);
+
+  this.correctScrollForFixedRows();
+}
+
+public onEventUpdated(event: MbscEventUpdatedEvent): void {
+  this.showPopup = true;
+  this.anchor = event.target!;
+  this.currentEventId = event.event.id ?? 0;
+
+  const original = this.myEvents.find((ev) => ev.id === event.event.id);
+  this.previousStart = (original?.start as Date) ?? new Date();
+  this.previousEnd = (original?.end as Date) ?? new Date();
+
+  this.myEvents = this.myEvents.map((ev) => (ev.id === event.event.id ? event.event! : ev));
+}
 
   public onPopupClose(): void {
     this.showPopup = false;
@@ -218,4 +455,17 @@ export class AppComponent {
       return ev;
     });
   }
+
+  // finishes, it bails out instead of overwriting scrollTop with stale values.
+  private correctScrollForFixedRows(): void {
+    setTimeout(() => {
+        const el = (this.calendar as any).nativeElement as HTMLElement;
+        const scrollCont = el.querySelector<HTMLElement>('.mbsc-timeline-grid-scroll');
+        const fixedRows = Array.from(el.querySelectorAll<HTMLElement>('.mbsc-timeline-row-fixed'));
+        if (!scrollCont || !fixedRows.length) return;
+        const top = scrollCont.getBoundingClientRect().top;
+        const fixedHeight = Math.max(0, ...fixedRows.map(r => r.getBoundingClientRect().bottom - top));
+        scrollCont.scrollTop = Math.max(0, scrollCont.scrollTop - fixedHeight);
+    }, 500); // matches production's delay exactly
+}
 }
