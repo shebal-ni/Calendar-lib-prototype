@@ -4,6 +4,33 @@
   display: none;
 }
 
+// Expand the resource column width to accommodate horizontal layout
+::ng-deep .mbsc-timeline-resource {
+  width: 800px !important;
+  flex: 0 0 800px !important;
+}
+
+// Allow resource template content to overflow and be scrollable
+// (Mobiscroll clips content by default with overflow: hidden on mbsc-timeline)
+::ng-deep .mbsc-timeline-resource-item {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+// Mobiscroll's minHeight property affects grid calculations but not actual DOM height.
+// Force the resource rows to expand to accommodate content by overriding Shadow DOM styles.
+::ng-deep .mbsc-timeline-row-fixed {
+  height: auto !important;
+  min-height: auto !important;
+}
+
+::ng-deep .fixed-resource-row {
+  height: auto !important;
+  overflow: visible !important;
+}
+
+
+
 // Mobiscroll fills every event box with its own tinted color layer. Remove it
 // only for the fixed-row placeholder events (event.cssClass = 'fixed-row-event')
 // so they stay plain, and normal events keep their default coloring.
@@ -22,25 +49,71 @@
   border-bottom: none !important;
 }
 
-.fixed-row {
-  // Pin the row's content to the left edge of the viewport so it stays put
-  // even when the timeline is scrolled horizontally through the hours.
-  background: #f0f0f0;
-  position: sticky;
-  left: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 100%;
+// Toolbar buttons: display horizontally in rows for expanded layout
+.fixed-row--toolbar {
+  display: grid !important;
+  grid-template-columns: repeat(5, 1fr) !important;
+  gap: 4px;
   width: 100%;
-  padding: 0 10px;
+}
+
+.fixed-row--toolbar .fixed-row__label {
+  grid-column: 1 / -1;
+}
+
+// Tabs buttons: display horizontally
+.fixed-row--tabs {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.fixed-row--tabs .fixed-row__label {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+// Schedule row: display horizontally
+.fixed-row--schedule {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.fixed-row--schedule .fixed-row__label {
+  width: 100%;
+  margin-bottom: 2px;
+}
+
+.fixed-row--schedule .fixed-row__select {
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+
+.fixed-row--schedule .fixed-row__input {
+  flex: 1 1 auto;
+  min-width: 80px;
+}
+
+.fixed-row {
+  // Rendered in resourceTemplate which provides the left column content.
+  // fixed: true on resources makes them sticky; template should not repeat this.
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-height: 60px;
+  background: #f0f0f0;
+  padding: 4px 6px;
   box-sizing: border-box;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #333;
-  overflow: hidden;
+  overflow: visible;
 }
+
 ::ng-deep .fixed-resource-row {
   background: #fff !important;
 }
@@ -50,35 +123,42 @@
 }
 
 .fixed-row__label {
-  min-width: 70px;
+  font-size: 10px;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
 .fixed-row__input {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 8px;
+  width: 100%;
+  padding: 2px 3px;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: 2px;
+  font-size: 10px;
+  box-sizing: border-box;
 }
 
 .fixed-row__select {
-  padding: 4px 6px;
+  width: 100%;
+  padding: 2px 3px;
   border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: 2px;
+  font-size: 10px;
+  box-sizing: border-box;
 }
 
 .nav-btn {
-  flex-shrink: 0;
-  padding: 6px 14px;
+  flex: 1 1 auto;
+  min-width: 50px;
+  padding: 4px 6px;
   border: none;
-  border-radius: 4px;
+  border-radius: 2px;
   background: #1976d2;
   color: #fff;
-  font-size: 13px;
+  font-size: 11px;
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-btn:hover {
@@ -87,13 +167,14 @@
 
 .tab-btn {
   flex-shrink: 0;
-  padding: 5px 12px;
+  padding: 2px 6px;
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: 2px;
   background: #fff;
   color: #333;
-  font-size: 13px;
+  font-size: 10px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .tab-btn--active {

@@ -9,85 +9,71 @@
   [view]="view"
   [selectedDate]="mySelectedDate"
   [height]="calendarHeight"
+  [resourceTemplate]="resourceTemplate"
   [scheduleEventContentTemplate]="eventCardTemplate"
   (onEventUpdated)="onEventUpdated($event)"
 >
 </mbsc-eventcalendar>
 
-<!-- Single template reused for every event on the timeline. The 3 fixed rows
-     use "container" events (spanning the whole day) whose `kind` selects the
-     custom UI to render (schedule form / toolbar / tabs). Every other event
-     falls through to the plain event card. -->
+<!-- Event template: renders only real calendar events -->
 <ng-template #eventCardTemplate let-data>
-  <ng-container [ngSwitch]="data.original.kind">
-    <div class="fixed-row fixed-row--schedule" *ngSwitchCase="'schedule-slot'">
+  <div class="event-card">
+    <div class="event-card__title">{{ data.title }}</div>
+    <div class="event-card__time">{{ data.start }} - {{ data.end }}</div>
+  </div>
+</ng-template>
+
+<!-- Resource template: renders Schedule, Toolbar, Tabs in the narrow left column -->
+<ng-template #resourceTemplate let-resource>
+  <ng-container [ngSwitch]="resource.id">
+    <div class="fixed-row fixed-row--schedule" *ngSwitchCase="'fixed-schedule'">
       <span class="fixed-row__label">Schedule</span>
       <select class="fixed-row__select" [(ngModel)]="scheduleResource">
-        <option *ngFor="let d of [1,2,3,4,5,6]" [value]="'dut-' + d">DUT {{ d }}</option>
+        <option *ngFor="let d of [1,2,3,4,5,6]" [value]="'dut-' + d">D{{ d }}</option>
       </select>
       <input
         class="fixed-row__input"
         type="text"
-        placeholder="Work item title"
+        placeholder="Title"
         [(ngModel)]="scheduleTitle"
       />
-      <button type="button" class="nav-btn" (click)="scheduleWorkItem()">Schedule</button>
+      <button type="button" class="nav-btn" (click)="scheduleWorkItem()">+</button>
     </div>
 
-    <div class="fixed-row fixed-row--toolbar" *ngSwitchCase="'toolbar'">
+    <div class="fixed-row fixed-row--toolbar" *ngSwitchCase="'fixed-toolbar'">
       <span class="fixed-row__label">Toolbar</span>
-      <button type="button" class="nav-btn" (click)="navigateToEvent(fixtureEvent)">
-  → System 5 Fixture 1 Event
-</button>
-      <button type="button" class="nav-btn" (click)="navigateToTarget()">
-        → DUT 1103 Event
-      </button>
-      <button type="button" class="nav-btn" (click)="navigateToDutSix()">
-        → DUT 6 Event
-      </button>
-      <button type="button" class="nav-btn" (click)="navigateToAsset()">
-        → Asset 400 Event
-      </button>
-      <button type="button" class="nav-btn" (click)="navigateToSharedDut()">
-        → Shared (DUT 3)
-      </button>
-      <button type="button" class="nav-btn" (click)="navigateToSharedAsset()">
-        → Shared (Asset 4)
-      </button>
+      <button type="button" class="nav-btn" (click)="navigateToEvent(fixtureEvent)" title="System 5 Fixture 1">Sys5-F1</button>
+      <button type="button" class="nav-btn" (click)="navigateToTarget()" title="DUT 1103">DUT 1103</button>
+      <button type="button" class="nav-btn" (click)="navigateToDutSix()" title="DUT 6">DUT 6</button>
+      <button type="button" class="nav-btn" (click)="navigateToAsset()" title="Asset 400">AST 400</button>
+      <button type="button" class="nav-btn" (click)="navigateToSharedDut()" title="Shared DUT 3">Shared-DUT</button>
+      <button type="button" class="nav-btn" (click)="navigateToSharedAsset()" title="Shared Asset 4">Shared-AST</button>
+      <button type="button" class="nav-btn" (click)="navigateToDut1189()" title="DUT 1189">DUT 1189</button>
+      <button type="button" class="nav-btn" (click)="navigateToAsset944()" title="Asset 944">AST 944</button>
+      <button type="button" class="nav-btn" (click)="navigateToAsset700Event1()" title="Asset 700 E1">A700-E1</button>
+      <button type="button" class="nav-btn" (click)="navigateToAsset700Event2()" title="Asset 700 E2">A700-E2</button>
     </div>
 
-    <div class="fixed-row fixed-row--tabs" *ngSwitchCase="'tabs'">
+    <div class="fixed-row fixed-row--tabs" *ngSwitchCase="'fixed-tabs'">
       <span class="fixed-row__label">Tabs</span>
-      <button
-        type="button"
-        class="tab-btn"
-        [class.tab-btn--active]="activeTab === 'systems'"
-        (click)="selectTab('systems')"
-      >
-        Systems
+      <button type="button" class="tab-btn"
+              [class.tab-btn--active]="activeTab === 'systems'"
+              (click)="selectTab('systems')">
+        SYS
       </button>
-      <button
-        type="button"
-        class="tab-btn"
-        [class.tab-btn--active]="activeTab === 'duts'"
-        (click)="selectTab('duts')"
-      >
-        DUTs
+      <button type="button" class="tab-btn"
+              [class.tab-btn--active]="activeTab === 'duts'"
+              (click)="selectTab('duts')">
+        DUT
       </button>
-      <button
-        type="button"
-        class="tab-btn"
-        [class.tab-btn--active]="activeTab === 'assets'"
-        (click)="selectTab('assets')"
-      >
-        Assets
+      <button type="button" class="tab-btn"
+              [class.tab-btn--active]="activeTab === 'assets'"
+              (click)="selectTab('assets')">
+        AST
       </button>
     </div>
 
-    <div class="event-card" *ngSwitchDefault>
-      <div class="event-card__title">{{ data.title }}</div>
-      <div class="event-card__time">{{ data.start }} - {{ data.end }}</div>
-    </div>
+    <div *ngSwitchDefault>{{ resource.name }}</div>
   </ng-container>
 </ng-template>
 

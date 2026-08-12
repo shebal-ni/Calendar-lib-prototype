@@ -13,10 +13,6 @@ import {
 import { FormsModule } from '@angular/forms';
 import { Component, OnInit, ViewChild, NgZone } from '@angular/core';
 
-// Discriminator for the placeholder events that live in the 3 fixed rows.
-// They only carry UI (schedule form / toolbar / tabs), not real schedule data.
-type FixedRowKind = 'schedule-slot' | 'toolbar' | 'tabs';
-
 // --- App-level abstraction, mirroring SlCalendarEvent from systemlink-calendar-lib ---
 // This is the shape app-level code (e.g. the toolbar click handler) works with.
 // It intentionally uses `resources` (plural array) instead of Mobiscroll's native
@@ -31,7 +27,6 @@ interface SlCalendarEvent {
   canEdit?: boolean;
   canDelete?: boolean;
   cssClass?: string;
-  kind?: FixedRowKind;
 }
 
 // --- Adapter, mirroring MobiscrollDataAdapter.convertToMbscEventData() ---
@@ -154,6 +149,57 @@ export class AppComponent {
     color: '#f57c00',
   };
 
+  // Overlapping event on DUT 1103 to test variable row heights
+  // This runs at the same time as targetEvent, forcing row expansion
+  public overlappingEvent: MbscCalendarEvent = {
+    id: 'overlapping-event-dut1103',
+    resource: 'dut-1103',
+    start: new Date('2024-11-21T09:30:00.000Z'),
+    end: new Date('2024-11-21T11:30:00.000Z'),
+    title: 'Overlapping Event (Variable Height)',
+    color: '#ff6f00',
+  };
+
+  // DUT 1189 event for testing variable row heights
+  public dut1189Event: MbscCalendarEvent = {
+    id: 'dut-1189-event',
+    resource: 'dut-1189',
+    start: new Date('2024-11-21T08:00:00.000Z'),
+    end: new Date('2024-11-21T10:00:00.000Z'),
+    title: 'DUT 1189 Event',
+    color: '#c2185b',
+  };
+
+  // Asset 944 event for testing variable row heights
+  public asset944Event: MbscCalendarEvent = {
+    id: 'asset-944-event',
+    resource: 'asset-944',
+    start: new Date('2024-11-21T12:00:00.000Z'),
+    end: new Date('2024-11-21T14:00:00.000Z'),
+    title: 'Asset 944 Event',
+    color: '#0097a7',
+  };
+
+  // First overlapping event on Asset 700 (to force row expansion)
+  public asset700Event1: MbscCalendarEvent = {
+    id: 'asset-700-event-1',
+    resource: 'asset-700',
+    start: new Date('2024-11-21T13:00:00.000Z'),
+    end: new Date('2024-11-21T15:00:00.000Z'),
+    title: 'Asset 700 Event 1',
+    color: '#6a1b9a',
+  };
+
+  // Second overlapping event on Asset 700 (overlaps with first to force row expansion)
+  public asset700Event2: MbscCalendarEvent = {
+    id: 'asset-700-event-2',
+    resource: 'asset-700',
+    start: new Date('2024-11-21T13:30:00.000Z'),
+    end: new Date('2024-11-21T15:30:00.000Z'),
+    title: 'Asset 700 Event 2',
+    color: '#00838f',
+  };
+
   public showPopup = false;
   public anchor: HTMLElement = document.createElement('div');
 
@@ -183,9 +229,9 @@ export class AppComponent {
       // part of the same virtualized resource list, Mobiscroll's own scrolling
       // (including navigateToEvent) automatically keeps them out of the way -
       // scrollable rows land just below them instead of being hidden behind.
-      { id: 'fixed-schedule', fixed: true, name: 'Schedule', eventCreation: false, cssClass: 'fixed-resource-row' },
-      { id: 'fixed-toolbar', fixed: true, name: 'Toolbar', eventCreation: false, cssClass: 'fixed-resource-row' },
-      { id: 'fixed-tabs', fixed: true, name: 'Tabs', eventCreation: false, cssClass: 'fixed-resource-row' },
+      { id: 'fixed-schedule', fixed: true, name: 'Schedule', minHeight: 60, eventCreation: false, cssClass: 'fixed-resource-row' },
+      { id: 'fixed-toolbar', fixed: true, name: 'Toolbar', minHeight: 350, eventCreation: false, cssClass: 'fixed-resource-row' },
+      { id: 'fixed-tabs', fixed: true, name: 'Tabs', minHeight: 120, eventCreation: false, cssClass: 'fixed-resource-row' },
     ];
 
     // Systems, each with nested fixtures.
@@ -218,24 +264,14 @@ export class AppComponent {
     const dayStart = new Date('2024-11-21T00:00:00.000Z');
     const dayEnd = new Date('2024-11-22T00:00:00.000Z');
 
-    const fixedRow = (id: string, resource: string, kind: FixedRowKind): MbscCalendarEvent => ({
-      id,
-      resource,
-      start: dayStart,
-      end: dayEnd,
-      editable: false,
-      dragInTime: false,
-      dragBetweenResources: false,
-      resize: false,
-      cssClass: 'fixed-row-event',
-      kind,
-    } as MbscCalendarEvent);
-
-return [
-  fixedRow('schedule-slot-row', 'fixed-schedule', 'schedule-slot'),
-  fixedRow('toolbar-row', 'fixed-toolbar', 'toolbar'),
-  fixedRow('tabs-row', 'fixed-tabs', 'tabs'),
-  this.targetEvent,
+    // Fixed rows now render via resourceTemplate, no placeholder events needed
+    return [
+      this.targetEvent,
+  this.overlappingEvent,  // This overlaps with targetEvent, forcing variable row height
+  this.dut1189Event,
+  this.asset944Event,
+  this.asset700Event1,
+  this.asset700Event2,  // This overlaps with asset700Event1, forcing variable row height
   this.assetEvent,
   this.dutSixEvent,
   this.fixtureEvent,
@@ -371,6 +407,26 @@ private deepRebuildFilteredResources(): MbscResource[] {
     this.navigateToEvent(sharedOnAsset, 'asset-4');
   }
 
+  // Navigate to DUT 1189 Event
+  public navigateToDut1189(): void {
+    this.navigateToEvent(this.dut1189Event);
+  }
+
+  // Navigate to Asset 944 Event
+  public navigateToAsset944(): void {
+    this.navigateToEvent(this.asset944Event);
+  }
+
+  // Navigate to Asset 700 Event 1
+  public navigateToAsset700Event1(): void {
+    this.navigateToEvent(this.asset700Event1);
+  }
+
+  // Navigate to Asset 700 Event 2
+  public navigateToAsset700Event2(): void {
+    this.navigateToEvent(this.asset700Event2);
+  }
+
   // Helper method to perform the actual navigation to an event.
   // Finds the real event (if one exists) for the target resource, then builds the
   // app-level SlCalendarEvent shape (id, start, resources: [single id]) - matching
@@ -426,7 +482,6 @@ private navigateToEventViaAdapter(event: SlCalendarEvent): void {
     console.log('AFTER 300ms', { scrollTop: scrollCont?.scrollTop });
   }, 300);
 
-  this.correctScrollForFixedRows();
 }
 
 public onEventUpdated(event: MbscEventUpdatedEvent): void {
@@ -456,16 +511,4 @@ public onEventUpdated(event: MbscEventUpdatedEvent): void {
     });
   }
 
-  // finishes, it bails out instead of overwriting scrollTop with stale values.
-  private correctScrollForFixedRows(): void {
-    setTimeout(() => {
-        const el = (this.calendar as any).nativeElement as HTMLElement;
-        const scrollCont = el.querySelector<HTMLElement>('.mbsc-timeline-grid-scroll');
-        const fixedRows = Array.from(el.querySelectorAll<HTMLElement>('.mbsc-timeline-row-fixed'));
-        if (!scrollCont || !fixedRows.length) return;
-        const top = scrollCont.getBoundingClientRect().top;
-        const fixedHeight = Math.max(0, ...fixedRows.map(r => r.getBoundingClientRect().bottom - top));
-        scrollCont.scrollTop = Math.max(0, scrollCont.scrollTop - fixedHeight);
-    }, 500); // matches production's delay exactly
-}
 }
